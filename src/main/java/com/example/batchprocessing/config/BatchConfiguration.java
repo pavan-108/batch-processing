@@ -5,7 +5,6 @@ import com.example.batchprocessing.repository.CustomerRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
@@ -16,12 +15,16 @@ import org.springframework.batch.item.file.LineMapper;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.PathResource;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
+
+import java.io.File;
 
 @Configuration
 @AllArgsConstructor
@@ -36,10 +39,10 @@ public class BatchConfiguration {
 
     // Step
     @Bean
-    public Step step1() {
+    public Step step1(FlatFileItemReader<Customer> reader) {
         return new StepBuilder("csv-step", jobRepository)
                 .<Customer, Customer>chunk(10, transactionManager)
-                .reader(reader())
+                .reader(reader)
                 .processor(processor())
                 .writer(writer())
                 .taskExecutor(taskExecutor())
@@ -47,19 +50,19 @@ public class BatchConfiguration {
     }
 
     @Bean
-    public Job runJob() {
+    public Job runJob(FlatFileItemReader<Customer> reader) {
         return new JobBuilder("importCustomers", jobRepository)
-                .start(step1())
+                .start(step1(reader))
                 .build();
     }
 
 
     // Item Reader
     @Bean
-    @StepScope
-    public FlatFileItemReader<Customer> reader() {
+    @StepScope // Instantiates a new Instance of this component (useful during late param binding)
+    public FlatFileItemReader<Customer> reader(@Value("#{jobParameters[fullPathFileName]}") String pathOfFile) {
         FlatFileItemReader<Customer> itemReader = new FlatFileItemReader<>();
-        itemReader.setResource(new FileSystemResource("src/main/resources/customers.csv"));
+        itemReader.setResource(new FileSystemResource(new File(pathOfFile)));
         itemReader.setName("csvReader");
         itemReader.setLinesToSkip(1);
         itemReader.setLineMapper(lineMapper());
